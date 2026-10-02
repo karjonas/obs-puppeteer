@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.karjonas.obs_puppeteer</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>OBS Puppeteer</name>
+  <developer id="io.github.karjonas">
+    <name>Jonas Karlsson</name>
+  </developer>
+  <summary>Unofficial native control panel for OBS Studio</summary>
+  <description>
+    <p>
+      A native desktop control panel for OBS Studio, talking directly to
+      obs-websocket (bundled with OBS 28 and later). No OBS plugin is needed.
+    </p>
+    <ul>
+      <li>Scene list with live preview thumbnails and one-click switching</li>
+      <li>The current scene's sources, with visibility toggles</li>
+      <li>Audio mixer with mute toggles, volume faders and live level meters</li>
+      <li>Stream and record start/stop, with status and timecode</li>
+      <li>Studio Mode: preview and program scenes, transition picker and transition button</li>
+      <li>FPS, CPU, bitrate and skipped frames at a glance</li>
+    </ul>
+    <p>
+      This is an unofficial, third-party tool. It is not affiliated with,
+      endorsed by, or sponsored by the OBS Project.
+    </p>
+  </description>
+  <launchable type="desktop-id">obs-puppeteer.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Connected to OBS in Studio Mode</caption>
+      <image>https://raw.githubusercontent.com/karjonas/obs-puppeteer/HEAD/docs/screenshot.png</image>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/karjonas/obs-puppeteer</url>
+  <url type="bugtracker">https://github.com/karjonas/obs-puppeteer/issues</url>
+  <provides>
+    <binary>obs-puppeteer</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.0" date="2026-10-02">
+      <description>
+        <p>Initial release.</p>
+      </description>
+    </release>
+  </releases>
+</component>

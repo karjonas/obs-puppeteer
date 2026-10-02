@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=OBS Puppeteer
+Comment=Unofficial native control panel for OBS Studio
+Exec=obs-puppeteer
+Icon=obs-puppeteer
+Categories=AudioVideo;Recorder;
+Terminal=false

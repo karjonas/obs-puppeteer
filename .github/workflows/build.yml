@@ -1,0 +1,395 @@
+# Copyright (C) 2026 Jonas Karlsson
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+name: Build
+
+on:
+  push:
+    # Not ["**"], so a feature branch with an open PR builds once, for the PR.
+    branches: [master, main, wip]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: "6.8.3"
+  QT_STATIC_VERSION: "6.8.3"
+  # qtsvg is required: the icons are SVG.
+  QT_STATIC_MODULES: "qtbase,qtshadertools,qtdeclarative,qtwebsockets,qtsvg"
+
+jobs:
+  test:
+    name: Build & test (Linux, Qt ${{ matrix.qt }})
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # 6.8 is the minimum CMakeLists.txt requires and the version releases ship with.
+        # The newest Qt is for testing only, to catch behaviour changes early; move it
+        # along as Qt releases. Spelled out because the strategy block can't see env.
+        qt: ["6.8.*", "6.12.*"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ matrix.qt }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  test-windows:
+    name: Build & test (Windows, prebuilt Qt)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2022_64
+          modules: qtwebsockets
+          cache: true
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+  
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+  
+      - name: Configure
+        shell: cmd
+        run: |
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release
+  
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_ASSUME_STDERR_HAS_CONSOLE: "1"
+        run: ctest --test-dir build --output-on-failure --verbose
+
+  # Builds and tests only; there's no macOS package yet (it would need signing
+  # and notarization to open without warnings).
+  test-macos:
+    name: Build & test (macOS, prebuilt Qt)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_ASSUME_STDERR_HAS_CONSOLE: "1"
+        run: ctest --test-dir build --output-on-failure
+
+  package-linux:
+    name: Package (Linux AppImage)
+    runs-on: ubuntu-22.04
+    needs: test
+    # Packages every run, so each commit has an AppImage and exe to try (kept for
+    # seven days). Building often also keeps the static Qt cache warm. Only tags
+    # publish a release.
+    steps:
+      # Full history and tags, for `git describe` (see cmake/Version.cmake).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Configure & build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+          cmake --build build --parallel
+
+      - name: Install into AppDir
+        run: |
+          DESTDIR=build/AppDir cmake --install build --prefix /usr
+          # Without the SVG, linuxdeploy uses the PNG for .DirIcon, which AppImage
+          # catalogs need for thumbnails.
+          rm -r build/AppDir/usr/share/icons/hicolor/scalable
+
+      # appimage.github.io builds its catalog page from this.
+      - name: Validate AppStream metainfo
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq appstream
+          appstreamcli validate --no-net build/AppDir/usr/share/metainfo/io.github.karjonas.obs_puppeteer.appdata.xml
+
+      - name: Download linuxdeploy tools
+        run: |
+          curl -sL -o linuxdeploy-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          curl -sL -o linuxdeploy-plugin-qt-x86_64.AppImage https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-qt-x86_64.AppImage
+
+      # NO_STRIP: linuxdeploy's bundled strip can't handle newer toolchains'
+      # relocations. Stripping only saves size.
+      - name: Build AppImage
+        env:
+          QML_SOURCES_PATHS: ${{ github.workspace }}/qml
+          QMAKE: qmake
+          NO_STRIP: "1"
+          # linuxdeploy bundles only xcb by default, so request the Wayland plugins
+          # (Qt 6.8 splits them in two). wayland-egl is copied in by hand below.
+          # Offscreen is for the smoke test.
+          EXTRA_PLATFORM_PLUGINS: "libqwayland-egl.so;libqwayland-generic.so;libqoffscreen.so"
+          # Named explicitly: by default the file is named after the desktop file, and
+          # a glob would also match the linuxdeploy tools.
+          LDAI_OUTPUT: dist/obs-puppeteer-x86_64.AppImage
+        run: |
+          mkdir -p dist
+          # Without wayland-egl, Qt Quick can't get an OpenGL context on Wayland and
+          # aborts at startup. linuxdeploy-plugin-qt skips it.
+          egl_dir=build/AppDir/usr/plugins/wayland-graphics-integration-client
+          mkdir -p "$egl_dir"
+          cp "$QT_ROOT_DIR/plugins/wayland-graphics-integration-client/libqt-plugin-wayland-egl.so" "$egl_dir/"
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run \
+            --appdir build/AppDir \
+            --executable build/obs-puppeteer \
+            --deploy-deps-only "$egl_dir" \
+            --desktop-file resources/obs-puppeteer.desktop \
+            --icon-file resources/icons/obs-puppeteer.png \
+            --plugin qt \
+            --output appimage
+
+      # Check the AppImage actually starts: a missing plugin or QML module only
+      # fails at launch. --appimage-extract-and-run avoids needing FUSE.
+      - name: Smoke-test the AppImage
+        run: |
+          set +e
+          XDG_CONFIG_HOME="$RUNNER_TEMP/smoke-config" \
+          QT_ASSUME_STDERR_HAS_CONSOLE=1 \
+          QT_QPA_PLATFORM=offscreen \
+            timeout 20 dist/obs-puppeteer-x86_64.AppImage --appimage-extract-and-run > smoke.log 2>&1
+          rc=$?
+          set -e
+          cat smoke.log
+          # 124 is the timeout: still running, as it should be without OBS.
+          if [ "$rc" != "124" ] && [ "$rc" != "0" ]; then
+            echo "AppImage exited with $rc"
+            exit 1
+          fi
+          # Offscreen can't test Wayland, so check the plugin is there.
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/dist/obs-puppeteer-x86_64.AppImage" --appimage-extract > /dev/null)
+          test -f "$RUNNER_TEMP/squashfs-root/usr/plugins/wayland-graphics-integration-client/libqt-plugin-wayland-egl.so" \
+            || { echo "wayland-egl client buffer plugin missing from AppImage"; exit 1; }
+
+      # A week: releases keep their own copies.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs-puppeteer-linux-x86_64-appimage
+          path: dist/obs-puppeteer-x86_64.AppImage
+          retention-days: 7
+
+  package-windows:
+    name: Package (Windows, static, portable .exe)
+    runs-on: windows-2022
+    needs: test-windows
+    # Every run; see package-linux.
+    timeout-minutes: 180
+    steps:
+      # Full history for git describe; see package-linux.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      # No prebuilt static Qt exists, so build it from source and cache it (1-2+
+      # hours on a cache miss). Cache keys can't contain commas, hence the
+      # conversion.
+      - name: Compute static Qt cache key
+        id: static-qt-key
+        shell: pwsh
+        run: |
+          $modules = $env:QT_STATIC_MODULES -replace ',', '-'
+          "key=windows-static-qt-$env:QT_STATIC_VERSION-$modules-v1" >> $env:GITHUB_OUTPUT
+
+      # Restored here and saved straight after the build is validated (below),
+      # so a later failure doesn't throw away a fresh Qt build.
+      - name: Restore static Qt build
+        id: cache-static-qt
+        uses: actions/cache/restore@v4
+        with:
+          path: C:/Qt-static
+          key: ${{ steps.static-qt-key.outputs.key }}
+
+      # Outside the checkout: qmlimportscanner scans the whole tree, and Qt's own
+      # test QML files would break our configure.
+      - name: Clone Qt source
+        if: steps.cache-static-qt.outputs.cache-hit != 'true'
+        run: git clone --branch v${{ env.QT_STATIC_VERSION }} --depth 1 https://code.qt.io/qt/qt5.git C:/qt-src
+
+      # -static-runtime links the MSVC runtime too, so no VC++ Redistributable is
+      # needed.
+      - name: Configure & build static Qt
+        if: steps.cache-static-qt.outputs.cache-hit != 'true'
+        shell: cmd
+        # `call`, or cmd never returns from the .bat and the later lines silently
+        # don't run.
+        run: |
+          echo Starting Qt build...
+          mkdir C:\qt-build
+          cd /d C:\qt-build
+          echo Configuring Qt...
+          call C:\qt-src\configure -init-submodules -submodules %QT_STATIC_MODULES% ^
+            -static -static-runtime -release -prefix C:/Qt-static ^
+            -nomake examples -nomake tests
+          if errorlevel 1 (
+            echo Configure failed with error %errorlevel%
+            exit /b %errorlevel%
+          )
+          echo Qt configure completed. Starting build...
+          cmake --build . --parallel
+          if errorlevel 1 (
+            echo Build failed with error %errorlevel%
+            exit /b %errorlevel%
+          )
+          echo Build completed. Starting install...
+          cmake --install .
+          if errorlevel 1 (
+            echo Install failed with error %errorlevel%
+            exit /b %errorlevel%
+          )
+          echo Qt build and install completed successfully
+          dir C:\Qt-static /s /b | findstr cmake
+
+      - name: Verify static Qt build completed
+        shell: pwsh
+        run: |
+          if ("${{ steps.cache-static-qt.outputs.cache-hit }}" -ne "true") {
+            if (-not (Test-Path 'C:/qt-src')) {
+              Write-Error "Qt source was not cloned. Build may have failed silently."
+              exit 1
+            }
+            if (-not (Test-Path 'C:/qt-build')) {
+              Write-Error "Qt build directory was not created. Configure/build may have failed."
+              exit 1
+            }
+          }
+
+      - name: Validate static Qt install
+        shell: pwsh
+        run: |
+          $qtCfg = 'C:/Qt-static/lib/cmake/Qt6/Qt6Config.cmake'
+          if (-not (Test-Path $qtCfg)) {
+            Write-Error "Static Qt install missing: $qtCfg"
+            exit 1
+          }
+
+      - name: Save static Qt build
+        if: steps.cache-static-qt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: C:/Qt-static
+          key: ${{ steps.static-qt-key.outputs.key }}
+
+      - name: Configure obs-puppeteer
+        shell: cmd
+        run: |
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DCMAKE_PREFIX_PATH=C:/Qt-static ^
+            -DQt6_DIR=C:/Qt-static/lib/cmake/Qt6 ^
+            -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
+            -DBUILD_TESTING=OFF
+
+      - name: Build obs-puppeteer
+        run: cmake --build build --parallel
+
+      # Verify the exe depends on no Qt DLL and no MSVC runtime.
+      - name: Check the exe is genuinely portable
+        shell: pwsh
+        run: |
+          $deps = dumpbin /dependents build\obs-puppeteer.exe
+          $deps
+          $bad = $deps | Select-String -Pattern '(Qt6.*\.dll|MSVCP\d+\.dll|VCRUNTIME\d+\.dll)'
+          if ($bad) {
+            Write-Error "exe depends on runtime DLLs it was meant to statically link: $bad"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: obs-puppeteer-windows-x64-static
+          path: build/obs-puppeteer.exe
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [package-linux, package-windows]
+    runs-on: ubuntu-22.04
+    # Creating a release needs write access.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Name files after the version: v0.1.0 -> obs-puppeteer-0.1.0-...
+      - name: Name files after the version
+        id: names
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          mv artifacts/obs-puppeteer-linux-x86_64-appimage/obs-puppeteer-x86_64.AppImage \
+            "dist/obs-puppeteer-$version-x86_64.AppImage"
+          mv artifacts/obs-puppeteer-windows-x64-static/obs-puppeteer.exe \
+            "dist/obs-puppeteer-$version-windows-x64.exe"
+          ls -l dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          # Tags with a suffix (v0.1.0-beta) are published as pre-releases.
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          body: |
+            ## Downloads
+
+            - **Linux**: `obs-puppeteer-${{ steps.names.outputs.version }}-x86_64.AppImage` — `chmod +x` it and run it.
+            - **Windows**: `obs-puppeteer-${{ steps.names.outputs.version }}-windows-x64.exe` — one file, nothing to install.
+              It is unsigned, so SmartScreen will warn on first run; choose
+              *More info* then *Run anyway*.
+          files: |
+            dist/obs-puppeteer-${{ steps.names.outputs.version }}-x86_64.AppImage
+            dist/obs-puppeteer-${{ steps.names.outputs.version }}-windows-x64.exe

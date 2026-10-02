@@ -1,0 +1,40 @@
+# Copyright (C) 2026 Jonas Karlsson
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# Licensing for files that can't carry a header, per the REUSE specification
+# (https://reuse.software). Check with `reuse lint`.
+
+version = 1
+
+[[annotations]]
+path = [
+    ".gitignore",
+    "README.md",
+    "CONTRIBUTING.md",
+    "CHANGELOG.md",
+    "docs/**",
+    "resources/obs-puppeteer.desktop",
+    "resources/icons/obs-puppeteer.*",
+    "resources/icons/obs/ATTRIBUTION.md",
+]
+SPDX-FileCopyrightText = "Copyright (C) 2026 Jonas Karlsson"
+SPDX-License-Identifier = "GPL-3.0-or-later"
+
+# Under the licence its <metadata_license> names.
+[[annotations]]
+path = "resources/io.github.karjonas.obs_puppeteer.appdata.xml"
+SPDX-FileCopyrightText = "Copyright (C) 2026 Jonas Karlsson"
+SPDX-License-Identifier = "CC0-1.0"
+
+# OBS Studio's icons, unmodified; see resources/icons/obs/ATTRIBUTION.md.
+[[annotations]]
+path = "resources/icons/obs/*.svg"
+SPDX-FileCopyrightText = "Copyright (C) OBS Studio contributors"
+SPDX-License-Identifier = "GPL-2.0-or-later"
+
+# The LGPL text shown in the About dialog for Qt. Not in LICENSES/, since no
+# file here is under the LGPL.
+[[annotations]]
+path = "resources/licenses/LGPL-3.0-or-later.txt"
+SPDX-FileCopyrightText = "Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>"
+SPDX-License-Identifier = "LicenseRef-FSF-Verbatim"

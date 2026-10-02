@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  OBS Puppeteer's application icon.
+
+  A marionette's crossed control bars, with a string hanging from each end to
+  the thing it works: pause, play, record and stop. This program pulls the
+  strings; OBS does the broadcasting. The record dot is red, the colour OBS
+  gives a running output, and slightly larger - it is where the eye should
+  land.
+
+  Transport symbols rather than plain spheres, because the spheres said nothing
+  about what is on the other end of the strings. Scene cards and fader caps
+  were drawn too: cards read as four anonymous rectangles, and caps lost their
+  meaning without a track to sit on. A cross was also tried in place of the
+  stop square and dropped - it repeats the shape of the control above it, and
+  reads as "close" rather than as a transport key.
+
+  Two rules about how a marionette is strung, both learned by breaking them:
+
+  - Strings hang. Run inward to meet at one object they read as a medal on
+    cords.
+  - Every end of the control carries one. A symmetric cross drawn face-on
+    cannot show that - its upper and lower ends share a horizontal position, so
+    two of the four strings would be hidden behind the others. Hence the tilt,
+    which is why an airplane control is always illustrated at an angle.
+
+  Original artwork. Reference images were looked at for the arrangement but
+  none was traced, and no path here comes from one; they are licensed stock,
+  and while a composition is an idea and not protectable, the drawing would
+  have been. Nothing here derives from OBS Studio's logo, which is a black disc
+  bearing three white blades; a red dot is the ordinary language of recording.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect width="256" height="256" rx="56" fill="#1D1F26"/>
+
+  <!-- Strings first, so the bars sit over them. One per end, hanging. -->
+  <g stroke="#B4B4B4" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M60 61 L60 176"/>
+    <path d="M105 121 L105 176"/>
+    <path d="M151 35 L151 173"/>
+    <path d="M196 95 L196 178"/>
+  </g>
+
+  <!-- The control: a long bar and a shorter one crossed, seen at an angle so
+       all four ends are distinct. -->
+  <g fill="#E1E1E1">
+    <rect x="58" y="71" width="140" height="14" rx="7" transform="rotate(14 128 78)"/>
+    <rect x="79" y="71" width="98" height="14" rx="7" transform="rotate(-62 128 78)"/>
+  </g>
+
+  <!-- Pause, play, record, stop. -->
+  <g fill="#E1E1E1">
+    <rect x="48" y="178" width="9" height="28" rx="3.5"/>
+    <rect x="63" y="178" width="9" height="28" rx="3.5"/>
+    <path d="M94 176 L120 192 L94 208 Z"/>
+    <rect x="183" y="179" width="26" height="26" rx="5"/>
+  </g>
+  <circle cx="151" cy="192" r="19" fill="#C01C37"/>
+</svg>
