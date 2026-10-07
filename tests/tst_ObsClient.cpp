@@ -1415,9 +1415,10 @@ void TestObsClient::droppedConnectionRetriesWithASteadyMessage()
     QTRY_VERIFY(client.reconnecting());
     QVERIFY(client.lastError().contains(QStringLiteral("Reconnecting")));
 
+    // Waits for the attempts rather than a fixed time: on Windows each refused
+    // attempt takes about two seconds on top of the three-second delay.
     QSignalSpy errorChanges(&client, &ObsClient::lastErrorChanged);
-    QTest::qWait(7000);
-    QVERIFY2(attempts >= 3, qPrintable(QStringLiteral("%1 attempts").arg(attempts)));
+    QTRY_VERIFY_WITH_TIMEOUT(attempts >= 3, 20000);
     QCOMPARE(errorChanges.count(), 0);
     QVERIFY(client.reconnecting());
 

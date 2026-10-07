@@ -25,8 +25,10 @@ target_link_libraries(tst_ObsClient
 )
 
 add_test(NAME ObsClientTest COMMAND tst_ObsClient)
+# Generous: the limit only guards against a hung test, and refused connections
+# take seconds on Windows.
 set_tests_properties(ObsClientTest PROPERTIES
-    TIMEOUT 60
+    TIMEOUT 120
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_ASSUME_STDERR_HAS_CONSOLE=1"
 )
 

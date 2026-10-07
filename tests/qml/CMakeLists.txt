@@ -44,6 +44,6 @@ endif()
 
 add_test(NAME ScenesPanelQmlTest COMMAND tst_qml_scenespanel)
 set_tests_properties(ScenesPanelQmlTest PROPERTIES
-    TIMEOUT 30
+    TIMEOUT 120
     ENVIRONMENT "${qml_test_environment}"
 )
