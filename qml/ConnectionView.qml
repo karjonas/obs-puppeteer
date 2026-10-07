@@ -110,6 +110,7 @@ Item {
     }
 
     ColumnLayout {
+        id: form
         anchors.centerIn: parent
         width: Math.min(parent.width - 48, 340)
         spacing: 16
@@ -213,16 +214,21 @@ Item {
             enabled: !connecting && hostField.editText.length > 0
             onClicked: root.tryConnect()
         }
+    }
 
-        Label {
-            Layout.fillWidth: true
-            Layout.topMargin: 8
-            visible: root.obs.lastError.length > 0
-            text: root.obs.lastError
-            color: Theme.danger
-            wrapMode: Text.WordWrap
-            horizontalAlignment: Text.AlignHCenter
-        }
+    // Below the form rather than in it, so the error appearing or clearing (as it
+    // does on each attempt) doesn't re-centre the form and make it jump.
+    Label {
+        objectName: "connectionError"
+        anchors.top: form.bottom
+        anchors.topMargin: 24
+        anchors.horizontalCenter: form.horizontalCenter
+        width: form.width
+        visible: root.obs.lastError.length > 0
+        text: root.obs.lastError
+        color: Theme.danger
+        wrapMode: Text.WordWrap
+        horizontalAlignment: Text.AlignHCenter
     }
 
     AboutDialog {

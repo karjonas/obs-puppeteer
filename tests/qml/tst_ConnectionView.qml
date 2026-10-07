@@ -167,6 +167,23 @@ TestCase {
         compare(port.text, wasPort)
     }
 
+    // A failed attempt's error appears below the form without moving it, so
+    // clicking Connect doesn't make the form jump.
+    function test_an_error_does_not_move_the_form() {
+        const host = hostField()
+        const before = host.mapToItem(testCase, 0, 0).y
+
+        // Port 1 on this machine: refused at once.
+        obs.connectToObs("127.0.0.1", 1, "")
+        tryVerify(function() { return obs.lastError.length > 0 }, 10000)
+        waitForRendering(view)
+        compare(host.mapToItem(testCase, 0, 0).y, before)
+
+        const error = findChild(view, "connectionError")
+        verify(error !== null && error.visible)
+        verify(error.mapToItem(testCase, 0, 0).y > findChild(view, "rememberCheckBox").mapToItem(testCase, 0, 0).y)
+    }
+
     // The reachability dot: green only when reachable; hollow when down or unknown.
     function test_reachability_is_three_states() {
         const host = hostField()
