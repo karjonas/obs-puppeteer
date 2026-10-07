@@ -24,6 +24,9 @@ class ObsClient : public QObject
 
     Q_PROPERTY(State connectionState READ connectionState NOTIFY connectionStateChanged)
     Q_PROPERTY(QString lastError READ lastError NOTIFY lastErrorChanged)
+    // True after a working connection dropped (OBS quit, say), while retrying
+    // it. A failed attempt to connect is not retried.
+    Q_PROPERTY(bool reconnecting READ reconnecting NOTIFY reconnectingChanged)
 
     // The address last connected or connecting to, from the form or the command
     // line.
@@ -87,6 +90,7 @@ public:
 
     State connectionState() const { return m_state; }
     QString lastError() const { return m_lastError; }
+    bool reconnecting() const { return m_reconnecting; }
 
     QString host() const { return m_host; }
     int port() const { return m_port; }
@@ -154,6 +158,7 @@ public slots:
 signals:
     void connectionStateChanged();
     void lastErrorChanged();
+    void reconnectingChanged();
     void connectionTargetChanged();
     void scenesChanged();
     void thumbnailsChanged();
@@ -218,6 +223,10 @@ private:
     void requestTransitionList();
 
     void scheduleReconnect();
+    void setReconnecting(bool reconnecting);
+    // Opens the socket to m_host:m_port without touching the error message, so
+    // automatic retries don't flicker it.
+    void openSocket();
 
     QWebSocket m_socket;
     State m_state = Disconnected;
@@ -227,6 +236,7 @@ private:
     int m_port = 4455;
     QString m_password;
     bool m_userRequestedDisconnect = false;
+    bool m_reconnecting = false;
 
     QHash<QString, ResponseCallback> m_pendingRequests;
 

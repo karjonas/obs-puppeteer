@@ -98,6 +98,8 @@ private slots:
 
     void disconnectResetsState();
     void reconnectsAfterUnexpectedDisconnect();
+    void failedAttemptIsNotRetried();
+    void droppedConnectionRetriesWithASteadyMessage();
     void malformedMessageDoesNotCrash();
 
     void populatesStudioModeStateOnConnect();
@@ -1357,6 +1359,74 @@ void TestObsClient::reconnectsAfterUnexpectedDisconnect()
 
     // Allow time for the automatic reconnect and re-authentication.
     QTRY_COMPARE_WITH_TIMEOUT(client.connectionState(), ObsClient::Authenticated, 8000);
+}
+
+namespace {
+quint16 closedPort()
+{
+    MockObsServer closed;
+    if (!closed.start())
+        return 0;
+    return closed.port();
+}
+} // namespace
+
+// A failed attempt (a typo, OBS not running) shows its error and isn't retried.
+void TestObsClient::failedAttemptIsNotRetried()
+{
+    const quint16 port = closedPort();
+    QVERIFY(port != 0);
+
+    int attempts = 0;
+    ObsClient client;
+    connect(&client, &ObsClient::connectionStateChanged, &client, [&]() {
+        if (client.connectionState() == ObsClient::Connecting)
+            ++attempts;
+    });
+    client.connectToObs(QStringLiteral("127.0.0.1"), port, QString());
+
+    QTRY_VERIFY_WITH_TIMEOUT(!client.lastError().isEmpty(), 10000);
+    QTest::qWait(3500);
+    QCOMPARE(attempts, 1);
+    QVERIFY(!client.reconnecting());
+    QCOMPARE(client.connectionState(), ObsClient::Disconnected);
+}
+
+// When a working connection drops (OBS quits), it's retried with one steady
+// message, not one that's cleared and set again on every attempt.
+void TestObsClient::droppedConnectionRetriesWithASteadyMessage()
+{
+    auto *server = new MockObsServer;
+    QVERIFY(server->start());
+    autoIdentify(*server);
+
+    int attempts = 0;
+    ObsClient client;
+    connect(&client, &ObsClient::connectionStateChanged, &client, [&]() {
+        if (client.connectionState() == ObsClient::Connecting)
+            ++attempts;
+    });
+    client.connectToObs(QStringLiteral("127.0.0.1"), server->port(), QString());
+    QTRY_COMPARE(client.connectionState(), ObsClient::Authenticated);
+    QCOMPARE(attempts, 1);
+
+    // OBS quits: nothing listens there any more.
+    delete server;
+    QTRY_VERIFY(client.reconnecting());
+    QVERIFY(client.lastError().contains(QStringLiteral("Reconnecting")));
+
+    QSignalSpy errorChanges(&client, &ObsClient::lastErrorChanged);
+    QTest::qWait(7000);
+    QVERIFY2(attempts >= 3, qPrintable(QStringLiteral("%1 attempts").arg(attempts)));
+    QCOMPARE(errorChanges.count(), 0);
+    QVERIFY(client.reconnecting());
+
+    // Closing on purpose stops it.
+    client.disconnectFromObs();
+    QVERIFY(!client.reconnecting());
+    const int before = attempts;
+    QTest::qWait(3500);
+    QCOMPARE(attempts, before);
 }
 
 void TestObsClient::malformedMessageDoesNotCrash()

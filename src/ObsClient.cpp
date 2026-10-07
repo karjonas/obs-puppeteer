@@ -103,8 +103,7 @@ ObsClient::ObsClient(QObject *parent) : QObject(parent), m_previewWidth(kDefault
     });
 
     m_reconnectTimer.setSingleShot(true);
-    connect(&m_reconnectTimer, &QTimer::timeout, this,
-            [this]() { connectToObs(m_host, m_port, m_password); });
+    connect(&m_reconnectTimer, &QTimer::timeout, this, &ObsClient::openSocket);
 
     m_previewTimer.setInterval(kPreviewPollIntervalMs);
     connect(&m_previewTimer, &QTimer::timeout, this, [this]() {
@@ -151,6 +150,15 @@ void ObsClient::setLastError(const QString &error)
 
 void ObsClient::connectToObs(const QString &host, int port, const QString &password)
 {
+    // Connecting somewhere ends any retrying of a dropped connection, including
+    // an attempt still in flight. Aborting reports a disconnect straight away,
+    // so it's marked as deliberate first.
+    m_userRequestedDisconnect = true;
+    if (m_socket.state() != QAbstractSocket::UnconnectedState)
+        m_socket.abort();
+    m_reconnectTimer.stop();
+    setReconnecting(false);
+
     if (m_host != host || m_port != port) {
         m_host = host;
         m_port = port;
@@ -160,19 +168,33 @@ void ObsClient::connectToObs(const QString &host, int port, const QString &passw
     m_userRequestedDisconnect = false;
 
     setLastError(QString());
+    openSocket();
+}
+
+void ObsClient::openSocket()
+{
     setState(Connecting);
 
     QUrl url;
     url.setScheme(QStringLiteral("ws"));
-    url.setHost(host);
-    url.setPort(port);
+    url.setHost(m_host);
+    url.setPort(m_port);
     m_socket.open(url);
+}
+
+void ObsClient::setReconnecting(bool reconnecting)
+{
+    if (m_reconnecting == reconnecting)
+        return;
+    m_reconnecting = reconnecting;
+    emit reconnectingChanged();
 }
 
 void ObsClient::disconnectFromObs()
 {
     m_userRequestedDisconnect = true;
     m_reconnectTimer.stop();
+    setReconnecting(false);
     m_statusTimer.stop();
     m_previewTimer.stop();
     m_socket.close();
@@ -248,6 +270,10 @@ void ObsClient::scheduleReconnect()
 
 void ObsClient::onSocketError(QAbstractSocket::SocketError error)
 {
+    // While retrying, the "Reconnecting…" message stays put.
+    if (m_reconnecting)
+        return;
+
     // Usually OBS isn't running or its WebSocket server is off (the default).
     if (error == QAbstractSocket::ConnectionRefusedError) {
         setLastError(tr("Connection refused. Is OBS running, with its WebSocket server "
@@ -259,6 +285,7 @@ void ObsClient::onSocketError(QAbstractSocket::SocketError error)
 
 void ObsClient::onSocketDisconnected()
 {
+    const bool wasConnected = m_state == Authenticated;
     m_statusTimer.stop();
     m_previewTimer.stop();
     // The dropped callbacks would have cleared this set, so clear it here or
@@ -268,12 +295,23 @@ void ObsClient::onSocketDisconnected()
 
     // Retrying a wrong password can't succeed, so report it and stop.
     if (static_cast<int>(m_socket.closeCode()) == kCloseAuthenticationFailed) {
+        setReconnecting(false);
         setLastError(tr("OBS rejected the password."));
         setState(Disconnected);
         return;
     }
 
     setState(Disconnected);
+
+    // Only a working connection that dropped is retried. A failed attempt
+    // shows its error and stops, rather than retrying a typo forever.
+    if (m_userRequestedDisconnect || (!wasConnected && !m_reconnecting))
+        return;
+
+    if (!m_reconnecting) {
+        setReconnecting(true);
+        setLastError(tr("Lost the connection to OBS. Reconnecting…"));
+    }
     scheduleReconnect();
 }
 
@@ -339,6 +377,7 @@ void ObsClient::handleHello(const QJsonObject &d)
 void ObsClient::handleIdentified(const QJsonObject &)
 {
     setState(Authenticated);
+    setReconnecting(false);
     setLastError(QString());
 
     requestVideoSettings();

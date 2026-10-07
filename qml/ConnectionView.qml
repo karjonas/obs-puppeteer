@@ -205,8 +205,12 @@ Item {
         ObsButton {
             id: connectButton
             Layout.fillWidth: true
-            text: root.obs.connectionState === ObsClient.Connecting ? qsTr("Connecting…") : qsTr("Connect")
-            enabled: root.obs.connectionState !== ObsClient.Connecting && hostField.editText.length > 0
+            // Automatic retries don't count as connecting: the button stays
+            // usable so another address can be tried meanwhile.
+            readonly property bool connecting: root.obs.connectionState === ObsClient.Connecting
+                                               && !root.obs.reconnecting
+            text: connecting ? qsTr("Connecting…") : qsTr("Connect")
+            enabled: !connecting && hostField.editText.length > 0
             onClicked: root.tryConnect()
         }
 
