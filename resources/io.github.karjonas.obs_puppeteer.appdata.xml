@@ -40,6 +40,11 @@
   </provides>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.1" date="2026-10-11">
+      <description>
+        <p>Quieter reconnecting when OBS quits, and a steadier connection form.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-10-02">
       <description>
         <p>Initial release.</p>

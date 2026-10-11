@@ -4,6 +4,14 @@ Notable changes to OBS Puppeteer. Dates are release dates; this project follows
 [semantic versioning](https://semver.org/), and anything below 1.0 may still
 change shape between releases.
 
+## 0.1.1 — 2026-10-11
+
+- When OBS quits, the app now retries quietly with one steady "Reconnecting…"
+  message, instead of the connection form flickering on every attempt.
+- A failed attempt to connect (a typo, or OBS not running) shows its error
+  once instead of being retried every three seconds.
+- The connection form no longer jumps when an error appears or clears.
+
 ## 0.1.0 — 2026-10-02
 
 Initial release.
